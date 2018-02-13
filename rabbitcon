@@ -1,0 +1,125 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Copyright (C) 2017 Rafael Peria de Sene
+Licensed under the Apache License, Version 2.0 (the “License”);
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an “AS IS” BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+    Contributors:
+        * Rafael Sene <rpsene@gmail.com>
+"""
+
+import os
+import subprocess
+import json
+import time
+import sys
+
+
+def execute_stdout(command):
+    '''
+    Execute a command with its parameter and return the exit code
+    and the ouput of the command.
+    '''
+    try:
+        output = subprocess.check_output([command], stderr=subprocess.STDOUT,
+                                         shell=True)
+        return 0, output
+    except subprocess.CalledProcessError as excp:
+        return excp.returncode, excp.output
+
+
+def get_timestamp():
+    '''
+    Return the current timestamp.
+    '''
+    return time.strftime("%Y-%m-%d,%H:%M:%S")
+
+
+def pretty_print_queue(timestamp, name, consumers):
+    '''
+    Pretty-print the queue and its consumers.
+    '''
+    print(str(timestamp) + ',' + str(name) + ',' + str(consumers))
+
+
+def get_consumers(queue_json, queue_name=None):
+    '''
+    Prints the list of all queues and its consumers or
+    print the required queue defined by the user.
+    '''
+    list_of_queues = json.loads(queue_json)
+    for queue in list_of_queues:
+        if queue_name:
+            if queue['name'] == queue_name:
+                pretty_print_queue(get_timestamp(),
+                                   queue['name'],
+                                   queue['consumers'])
+        else:
+            pretty_print_queue(get_timestamp(),
+                               queue['name'],
+                               queue['consumers'])
+
+
+def get_help_message():
+    '''
+    Returns a error message to inform the user about the correct
+    usage of the tool.
+    '''
+    help_msg = '''
+    You can run this program without any argument to get all
+    available consumers for all the queues or set the name of a
+    specific queue.
+
+    Also, ensure you have set the following enviroment variables:
+
+    * export RABBITMQ_USER=<user-name>
+    * export RABBITMQ_PWD=<user-passwd>
+    * export RABBITMQ_URL=<rabbitmq-url>
+    * export RABBITMQ_PORT=<rabbitmq-port>
+    '''
+    return help_msg
+
+
+def read_env_vars():
+    '''
+    Read the user defined variables to access the RabbitMQ API and return
+    a formated command line
+    '''
+    user = os.getenv('RABBITMQ_USER', 0)
+    passwd = os.getenv('RABBITMQ_PWD', 0)
+    url = os.getenv('RABBITMQ_URL', 0)
+    port = os.getenv('RABBITMQ_PORT', 0)
+
+    # Check if all required variables are set
+    if 0 in {user, passwd, url, port}:
+        print("ERROR: Please, set the correct enviroment variables.")
+        sys.exit(1)
+
+    # Creates the command line that will be executed
+    cmd = "curl -s -u " + user + ":" + passwd + " " + url + ":" \
+    + port + "/api/queues"
+
+    return cmd
+
+if __name__ == '__main__':
+    # Check the correct amount of parameters
+    if len(sys.argv) > 2 or '--help' in sys.argv:
+        print(get_help_message())
+        sys.exit(1)
+
+    # Collects the JSON with all queues information
+    QUEUES = execute_stdout(read_env_vars())
+
+    # Executes the correct command based on the input
+    if len(sys.argv) == 2:
+        get_consumers(QUEUES[1], sys.argv[1])
+    else:
+        get_consumers(QUEUES[1])
